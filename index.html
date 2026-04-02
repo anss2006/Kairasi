@@ -49,7 +49,7 @@
       overflow: hidden;
     }
     #order-list-container.collapsed { max-height: 0; opacity: 0; }
-    #order-list-container.expanded  { max-height: 28rem; opacity: 1; overflow-y: auto; }
+    #order-list-container.expanded  { max-height: 36rem; opacity: 1; overflow-y: auto; }
 
     #panel-chevron { transition: transform 0.3s ease; }
     #panel-chevron.up { transform: rotate(180deg); }
@@ -165,20 +165,42 @@
     <!-- Cash section -->
     <div id="cash-section" class="hidden px-4 pt-1 pb-2">
       <div class="bg-bg border border-border rounded-2xl p-3.5 space-y-2.5">
-        <div class="flex items-center gap-2">
-          <svg class="w-3.5 h-3.5 text-textMuted flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
-          </svg>
-          <p class="text-[10px] uppercase tracking-widest font-semibold text-textMuted">Cash Received</p>
+
+        <!-- Header row: title + Smart toggle -->
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <svg class="w-3.5 h-3.5 text-textMuted flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
+            </svg>
+            <p class="text-[10px] uppercase tracking-widest font-semibold text-textMuted">Cash Received</p>
+          </div>
+          <!-- Smart Cash toggle -->
+          <label class="flex items-center gap-1.5 cursor-pointer select-none">
+            <span class="text-[10px] font-semibold text-textMuted">Smart</span>
+            <div class="relative">
+              <input id="smart-cash-toggle" type="checkbox" class="sr-only peer"
+                onchange="window.onSmartCashToggle()"/>
+              <div class="w-8 h-4 bg-border peer-checked:bg-accent rounded-full transition-colors duration-200"></div>
+              <div class="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform duration-200 peer-checked:translate-x-4"></div>
+            </div>
+          </label>
         </div>
+
+        <!-- Smart suggestions chips (visible when smart mode on) -->
+        <div id="smart-suggestions" class="hidden"></div>
+
+        <!-- Cash input -->
         <div class="relative">
           <span class="absolute left-3 top-1/2 -translate-y-1/2 text-textMuted text-sm font-bold pointer-events-none select-none">₹</span>
           <input id="cash-input" type="number" min="0" placeholder="Enter amount"
             oninput="window.onCashInput(this.value)"
             class="field w-full bg-surface border border-border rounded-xl pl-7 pr-4 py-2.5 text-sm text-textPrimary placeholder-textMuted"/>
         </div>
+
+        <!-- Balance / short / exact display -->
         <div id="balance-display" class="hidden"></div>
+
       </div>
     </div>
 
@@ -236,7 +258,7 @@
   </div>
 
   <!-- Menu grid -->
-  <div id="menu-grid" class="grid grid-cols-2 gap-3 px-3 pt-3"></div>
+  <div id="menu-grid" class="hidden grid grid-cols-2 gap-3 px-3 pt-3"></div>
 
   <!-- No results -->
   <div id="no-results" class="hidden px-4 py-16 text-center">
@@ -505,6 +527,34 @@ const app  = initializeApp(firebaseConfig);
 const db   = getFirestore(app);
 const auth = getAuth(app);
 
+/*
+ * ============================================================
+ * FIRESTORE SECURITY RULES  — paste into Firebase console
+ * ============================================================
+ * rules_version = '2';
+ * service cloud.firestore {
+ *   match /databases/{database}/documents {
+ *
+ *     // Menu: public read, admin-only write
+ *     match /menu/{itemId} {
+ *       allow read: if true;
+ *       allow write: if request.auth != null;
+ *     }
+ *
+ *     // Parcels: admin-only read & write
+ *     match /parcels/{parcelId} {
+ *       allow read, write: if request.auth != null;
+ *     }
+ *
+ *     // Meta (daily counter): admin-only
+ *     match /meta/{docId} {
+ *       allow read, write: if request.auth != null;
+ *     }
+ *   }
+ * }
+ * ============================================================
+ */
+
 // ------------------------------------------------------------------
 // STATE
 // ------------------------------------------------------------------
@@ -516,6 +566,7 @@ const state = {
   orderPanelExpanded: false,
   menuLoaded:         false,
   cashReceived:       0,
+  smartCashMode:      false,          // smart cash suggestions toggle
 
   activeTab:          'billing',
 
@@ -539,6 +590,7 @@ onSnapshot(
 
     state.menuLoaded = true;
     document.getElementById('menu-loading').classList.add('hidden');
+    document.getElementById('menu-grid').classList.remove('hidden');
     renderCategories();
     renderMenu();
     renderCart();
@@ -775,6 +827,7 @@ function renderCart() {
   if (entries.length === 0) {
     list.innerHTML = '<p class="text-textMuted text-xs py-2 pb-3">No items added yet.</p>';
     updateBalanceDisplay();
+    renderSmartSuggestions();
     return;
   }
 
@@ -805,6 +858,7 @@ function renderCart() {
 
   list.innerHTML = rows + totalRow;
   updateBalanceDisplay();
+  renderSmartSuggestions();
 }
 
 // ------------------------------------------------------------------
@@ -1369,6 +1423,88 @@ window.__deleteItem = async (id) => {
   } catch (err) {
     alert(`Delete failed: ${err.message}`);
   }
+};
+
+// ------------------------------------------------------------------
+// SMART CASH SUGGESTIONS
+// ------------------------------------------------------------------
+
+// Returns up to 5 practical payment amounts >= total.
+// Uses Indian denomination rounding (5, 10, 20, 50, 100, 200, 500).
+// All arithmetic is integer-safe via Math.round / Math.ceil.
+function getCashSuggestions(total) {
+  if (total <= 0) return [];
+  const t    = Math.round(total);
+  const seen = new Set();
+  const add  = (n) => { if (n >= t) seen.add(n); };
+
+  add(t); // always include exact amount
+
+  // Round up to each denomination step
+  [5, 10, 20, 50, 100, 200, 500].forEach(step => {
+    add(Math.ceil(t / step) * step);
+  });
+
+  return [...seen]
+    .sort((a, b) => a - b)
+    .slice(0, 5)
+    .map(amount => ({ amount, change: Math.round(amount - t) }));
+}
+
+// Renders suggestion chips inside #smart-suggestions.
+// Called from renderCart() so it updates whenever cart total changes.
+function renderSmartSuggestions() {
+  const el = document.getElementById('smart-suggestions');
+  if (!el) return;
+
+  if (!state.smartCashMode) {
+    el.classList.add('hidden');
+    el.innerHTML = '';
+    return;
+  }
+
+  const total = cartTotal();
+  if (total <= 0) {
+    el.classList.add('hidden');
+    el.innerHTML = '';
+    return;
+  }
+
+  const suggestions = getCashSuggestions(total);
+
+  el.classList.remove('hidden');
+  el.innerHTML = `
+    <div>
+      <p class="text-[9px] uppercase tracking-widest font-semibold text-textMuted mb-2">Suggested Amounts</p>
+      <div class="flex flex-wrap gap-1.5">
+        ${suggestions.map(s => `
+          <button
+            onclick="window.applyCashSuggestion(${s.amount})"
+            class="flex items-center gap-1.5 bg-surface border border-border rounded-xl px-2.5 py-1.5 active:scale-95 transition-transform">
+            <span class="text-[13px] font-extrabold text-textPrimary">₹${s.amount}</span>
+            ${s.change === 0
+              ? `<span class="text-[9px] font-bold text-accent uppercase tracking-wide">exact</span>`
+              : `<span class="text-[10px] text-textMuted">↩ ₹${s.change}</span>`
+            }
+          </button>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// Tapping a chip fills the cash input and triggers balance display.
+window.applyCashSuggestion = (amount) => {
+  state.cashReceived = amount;
+  const input = document.getElementById('cash-input');
+  if (input) input.value = amount;
+  updateBalanceDisplay();
+};
+
+// Smart toggle checkbox handler.
+window.onSmartCashToggle = () => {
+  state.smartCashMode = document.getElementById('smart-cash-toggle').checked;
+  renderSmartSuggestions();
 };
 
 // ------------------------------------------------------------------
