@@ -53,7 +53,7 @@
       overflow: hidden;
     }
     #order-list-container.collapsed { max-height: 0; opacity: 0; }
-    #order-list-container.expanded  { max-height: 18rem; opacity: 1; overflow-y: auto; }
+    #order-list-container.expanded  { max-height: 28rem; opacity: 1; overflow-y: auto; }
 
     /* Chevron spin */
     #panel-chevron { transition: transform 0.3s ease; }
@@ -100,7 +100,7 @@
     <div>
       <p class="text-[10px] uppercase tracking-widest font-semibold text-textMuted leading-none mb-0.5">Bill Calculator</p>
       <!-- Change restaurant name below -->
-      <h1 class="text-[17px] font-extrabold text-textPrimary leading-tight tracking-tight">THE GRAND</h1>
+      <h1 class="text-[17px] font-extrabold text-textPrimary leading-tight tracking-tight">Kairasi Restaurant</h1>
     </div>
     <button
       onclick="showAdminLogin()"
@@ -186,6 +186,31 @@
     <!-- Expanded list -->
     <div id="order-list-container" class="collapsed border-t border-border">
       <div id="order-list" class="px-4 pt-2 pb-1"></div>
+
+      <!-- Cash payment section -->
+      <div id="cash-section" class="hidden px-4 pt-1 pb-2">
+        <div class="bg-bg border border-border rounded-2xl p-3.5 space-y-2.5">
+          <div class="flex items-center gap-2">
+            <svg class="w-3.5 h-3.5 text-textMuted flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
+            </svg>
+            <p class="text-[10px] uppercase tracking-widest font-semibold text-textMuted">Cash Received</p>
+          </div>
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-textMuted text-sm font-bold pointer-events-none select-none">₹</span>
+            <input
+              id="cash-input"
+              type="number"
+              min="0"
+              placeholder="Enter amount"
+              oninput="window.onCashInput(this.value)"
+              class="field w-full bg-surface border border-border rounded-xl pl-7 pr-4 py-2.5 text-sm text-textPrimary placeholder-textMuted"
+            />
+          </div>
+          <div id="balance-display" class="hidden"></div>
+        </div>
+      </div>
+
       <div class="px-4 pb-3">
         <button
           onclick="clearOrder()"
@@ -401,6 +426,7 @@ const state = {
   searchQuery:          '',
   orderPanelExpanded:   false,
   menuLoaded:           false,
+  cashReceived:         0,
 };
 
 // ------------------------------------------------------------------
@@ -585,11 +611,16 @@ function renderCart() {
   if (count > 0) { badge.textContent = count; badge.classList.remove('hidden'); }
   else           { badge.classList.add('hidden'); }
 
+  // Show cash section only when cart has items
+  const cashSec = document.getElementById('cash-section');
+  if (cashSec) cashSec.classList.toggle('hidden', count === 0);
+
   const entries = Object.entries(state.cart).filter(([, e]) => e.qty > 0);
   const list    = document.getElementById('order-list');
 
   if (entries.length === 0) {
     list.innerHTML = '<p class="text-textMuted text-xs py-2 pb-3">No items added yet.</p>';
+    updateBalanceDisplay();
     return;
   }
 
@@ -619,6 +650,7 @@ function renderCart() {
   `;
 
   list.innerHTML = rows + totalRow;
+  updateBalanceDisplay();
 }
 
 // ------------------------------------------------------------------
@@ -689,6 +721,9 @@ window.__toggleBoneless = (id, checked) => {
 
 window.clearOrder = () => {
   state.cart = {};
+  state.cashReceived = 0;
+  const cashInput = document.getElementById('cash-input');
+  if (cashInput) cashInput.value = '';
   renderMenu();
   renderCart();
 };
@@ -883,6 +918,66 @@ window.__deleteItem = async (id) => {
     alert(`Delete failed: ${err.message}`);
   }
 };
+
+// ------------------------------------------------------------------
+// CASH PAYMENT
+// ------------------------------------------------------------------
+window.onCashInput = (val) => {
+  state.cashReceived = parseFloat(val) || 0;
+  updateBalanceDisplay();
+};
+
+function updateBalanceDisplay() {
+  const el = document.getElementById('balance-display');
+  if (!el) return;
+
+  const total = cartTotal();
+  const cash  = state.cashReceived;
+
+  if (cash <= 0) {
+    el.classList.add('hidden');
+    el.innerHTML = '';
+    return;
+  }
+
+  el.classList.remove('hidden');
+
+  if (cash === total) {
+    el.innerHTML = `
+      <div class="flex items-center justify-between bg-accent/10 border border-accent/30 rounded-xl px-3.5 py-2.5">
+        <div>
+          <p class="text-[9px] uppercase tracking-widest font-bold text-accent/80 mb-0.5">Exact Amount</p>
+          <p class="text-[11px] text-textMuted">No change needed</p>
+        </div>
+        <svg class="w-6 h-6 text-accent flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+        </svg>
+      </div>
+    `;
+  } else if (cash > total) {
+    const balance = cash - total;
+    el.innerHTML = `
+      <div class="flex items-center justify-between bg-success/10 border border-success/25 rounded-xl px-3.5 py-2.5">
+        <div>
+          <p class="text-[9px] uppercase tracking-widest font-bold text-success/80 mb-0.5">Balance to Return</p>
+          <p class="text-[11px] text-textMuted">Paid ₹${cash} &nbsp;·&nbsp; Total ₹${total}</p>
+        </div>
+        <p class="text-xl font-extrabold text-success flex-shrink-0">₹${balance}</p>
+      </div>
+    `;
+  } else {
+    const short = total - cash;
+    el.innerHTML = `
+      <div class="flex items-center justify-between bg-danger/10 border border-danger/25 rounded-xl px-3.5 py-2.5">
+        <div>
+          <p class="text-[9px] uppercase tracking-widest font-bold text-danger/80 mb-0.5">Amount Short</p>
+          <p class="text-[11px] text-textMuted">Need ₹${total} &nbsp;·&nbsp; Got ₹${cash}</p>
+        </div>
+        <p class="text-xl font-extrabold text-danger flex-shrink-0">₹${short}</p>
+      </div>
+    `;
+  }
+}
 
 // ------------------------------------------------------------------
 // UTILITY
