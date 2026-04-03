@@ -119,7 +119,7 @@
     </svg>
     <span class="text-[10px] font-semibold tracking-wide">Parcels</span>
     <span id="parcel-tab-badge"
-      class="hidden dot-pulse absolute top-2 right-[22%] w-2 h-2 bg-danger rounded-full"></span>
+      class="hidden dot-pulse absolute top-1.5 right-[18%] min-w-[16px] h-4 bg-danger rounded-full text-[9px] font-extrabold text-white flex items-center justify-center px-1 leading-none"></span>
   </button>
 
   <button id="tab-admin" onclick="switchTab('admin')"
@@ -206,9 +206,43 @@
       </div>
     </div>
 
+    <!-- Inline parcel save (revealed when Save as Parcel tapped) -->
+    <div id="parcel-inline" class="hidden px-4 pb-2 pt-1">
+      <div class="bg-bg border border-accent/30 rounded-2xl p-3 space-y-2.5">
+        <p class="text-[9px] uppercase tracking-widest font-bold text-accent">Parcel — <span id="parcel-inline-token">P-?</span></p>
+
+        <input id="parcel-inline-notes" type="text"
+          placeholder="Suggestions / special instructions (optional)"
+          class="field w-full bg-surface border border-border rounded-xl px-3 py-2 text-sm text-textPrimary placeholder-textMuted"/>
+
+        <!-- Paid toggle row -->
+        <div class="flex items-center justify-between">
+          <p class="text-[11px] text-textMuted">Already paid?</p>
+          <label class="relative inline-flex items-center cursor-pointer select-none">
+            <input id="parcel-inline-paid" type="checkbox" class="sr-only peer"/>
+            <div class="w-8 h-4 bg-border peer-checked:bg-success rounded-full transition-colors duration-200"></div>
+            <div class="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform duration-200 peer-checked:translate-x-4"></div>
+          </label>
+        </div>
+
+        <p id="parcel-inline-error" class="hidden text-danger text-xs"></p>
+
+        <div class="flex gap-2">
+          <button onclick="closeInlineParcel()"
+            class="flex-1 bg-surface border border-border text-textMuted text-xs font-semibold rounded-xl py-2 active:scale-95 transition-transform">
+            Cancel
+          </button>
+          <button id="parcel-inline-save-btn" onclick="saveParcel()"
+            class="flex-1 bg-accent text-bg text-xs font-bold rounded-xl py-2 active:scale-95 transition-transform">
+            Save Parcel
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Action buttons -->
-    <div class="px-4 pb-3 flex gap-2 mt-2">
-      <button id="save-parcel-btn" onclick="openParcelSheet()"
+    <div id="order-action-btns" class="px-4 pb-3 flex gap-2 mt-2">
+      <button id="save-parcel-btn" onclick="openInlineParcel()"
         class="hidden flex-1 bg-accent/10 border border-accent/25 text-accent text-sm font-bold rounded-xl py-2.5 active:scale-[0.97] transition-transform">
         Save as Parcel
       </button>
@@ -252,8 +286,16 @@
     </div>
   </div>
 
+  <!-- Quick-add strip (top frequent items) -->
+  <div id="quick-add-strip" class="hidden sticky top-[113px] z-10 bg-bg/95 backdrop-blur-sm border-b border-border px-3 py-2">
+    <div class="flex gap-2 overflow-x-auto no-scrollbar items-center">
+      <span class="text-[9px] uppercase tracking-widest font-bold text-textMuted flex-shrink-0 pr-1">Frequent</span>
+      <div id="quick-add-items" class="flex gap-2"></div>
+    </div>
+  </div>
+
   <!-- Category tabs -->
-  <div class="sticky top-[113px] z-10 bg-bg/95 backdrop-blur-sm border-b border-border">
+  <div id="cat-tabs-wrapper" class="sticky z-10 bg-bg/95 backdrop-blur-sm border-b border-border">
     <div id="category-tabs" class="flex gap-2 px-3 py-2 overflow-x-auto no-scrollbar">
       <span id="cats-loading" class="text-xs text-textMuted px-1 py-1 self-center">Loading...</span>
     </div>
@@ -391,76 +433,6 @@
 
 
 <!-- ============================================================
-     PARCEL SHEET  (create parcel)
-============================================================ -->
-<div id="parcel-sheet-backdrop"
-  class="hidden fixed inset-0 bg-black/75 z-50 items-end justify-center"
-  onclick="onParcelSheetBackdropClick(event)">
-
-  <div id="parcel-sheet-inner" class="bg-surface border border-border rounded-t-3xl w-full p-5 pt-4">
-
-    <!-- Handle -->
-    <div class="flex justify-center mb-4">
-      <div class="w-10 h-1 bg-border rounded-full"></div>
-    </div>
-
-    <p class="text-[10px] uppercase tracking-widest font-semibold text-accent mb-0.5">New Parcel</p>
-    <h3 class="text-base font-bold text-textPrimary mb-4">Customer Details</h3>
-
-    <!-- Read-only order summary -->
-    <div id="parcel-sheet-summary"
-      class="bg-bg border border-border rounded-xl p-3 mb-4 space-y-1.5 max-h-36 overflow-y-auto">
-    </div>
-
-    <div class="space-y-3">
-
-      <input id="parcel-name" type="text" placeholder="Customer name (optional)"
-        class="field w-full bg-bg border border-border rounded-xl px-4 py-2.5 text-sm text-textPrimary placeholder-textMuted"/>
-
-      <!-- Phone — optional -->
-      <div>
-        <input id="parcel-phone" type="tel" placeholder="Phone number (optional)"
-          class="field w-full bg-bg border border-border rounded-xl px-4 py-2.5 text-sm text-textPrimary placeholder-textMuted"/>
-        <p class="text-[10px] text-textMuted mt-1.5 px-1">
-          Phone is optional. Leave blank if the customer doesn't share it.
-        </p>
-      </div>
-
-      <input id="parcel-notes" type="text" placeholder="Notes — e.g. Extra spicy, less gravy (optional)"
-        class="field w-full bg-bg border border-border rounded-xl px-4 py-2.5 text-sm text-textPrimary placeholder-textMuted"/>
-
-      <!-- Paid toggle -->
-      <div class="flex items-center justify-between bg-bg border border-border rounded-xl px-4 py-3">
-        <div>
-          <p class="text-sm font-semibold text-textPrimary">Paid?</p>
-          <p class="text-[10px] text-textMuted mt-0.5">Toggle on if customer has already paid</p>
-        </div>
-        <label class="relative inline-flex items-center cursor-pointer select-none">
-          <input id="parcel-paid" type="checkbox" class="sr-only peer"/>
-          <div class="w-10 h-5 bg-border peer-checked:bg-success rounded-full transition-colors duration-200"></div>
-          <div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 peer-checked:translate-x-5"></div>
-        </label>
-      </div>
-
-      <p id="parcel-sheet-error" class="hidden text-danger text-xs px-1"></p>
-
-      <div class="flex gap-2 pt-1">
-        <button onclick="closeParcelSheet()"
-          class="flex-1 bg-bg border border-border text-textMuted text-sm font-semibold rounded-xl py-2.5 active:scale-95 transition-transform">
-          Cancel
-        </button>
-        <button id="parcel-save-btn" onclick="saveParcel()"
-          class="flex-1 bg-accent text-bg text-sm font-bold rounded-xl py-2.5 active:scale-95 transition-transform">
-          Save Parcel
-        </button>
-      </div>
-
-    </div>
-  </div>
-</div><!-- /parcel-sheet -->
-
-
-<!-- ============================================================
      ADD / EDIT ITEM MODAL
 ============================================================ -->
 <div id="modal-backdrop"
@@ -564,14 +536,15 @@ const auth = getAuth(app);
  *       allow write: if request.auth != null;
  *     }
  *
- *     // Parcels: admin-only read & write
+ *     // Parcels: open create+update, auth-only delete
  *     match /parcels/{parcelId} {
- *       allow read, write: if request.auth != null;
+ *       allow read, create, update: if true;
+ *       allow delete: if request.auth != null;
  *     }
  *
- *     // Meta (daily counter): admin-only
+ *     // Meta (daily counter): open read+write (needed for token generation without login)
  *     match /meta/{docId} {
- *       allow read, write: if request.auth != null;
+ *       allow read, write: if true;
  *     }
  *   }
  * }
@@ -589,15 +562,20 @@ const state = {
   orderPanelExpanded: false,
   menuLoaded:         false,
   cashReceived:       0,
-  smartCashMode:      false,          // smart cash suggestions toggle
+  smartCashMode:      false,
 
   activeTab:          'billing',
 
   parcels:            [],
   parcelsLoaded:      false,
   parcelFilter:       'pending',
-  parcelSearch:       '',             // name search filter for parcels view
+  parcelSearch:       '',
   expandedParcels:    new Set(),
+
+  isLoggedIn:         false,          // gates delete button in parcel cards
+  parcelInlineMode:   false,          // inline parcel save UI open
+  lastClearedCart:    null,           // for undo-clear toast
+  undoClearTimer:     null,           // setTimeout handle
 };
 
 // ------------------------------------------------------------------
@@ -668,6 +646,7 @@ onSnapshot(
 // AUTH STATE
 // ------------------------------------------------------------------
 onAuthStateChanged(auth, (user) => {
+  state.isLoggedIn = !!user;
   if (user) {
     document.getElementById('admin-login-screen').classList.add('hidden');
     document.getElementById('admin-dashboard').classList.remove('hidden');
@@ -676,6 +655,8 @@ onAuthStateChanged(auth, (user) => {
     document.getElementById('admin-login-screen').classList.remove('hidden');
     document.getElementById('admin-dashboard').classList.add('hidden');
   }
+  // Re-render parcels so delete button appears/disappears based on auth
+  renderParcels();
 });
 
 // ------------------------------------------------------------------
@@ -728,7 +709,70 @@ function cartToParcelItems() {
 }
 
 // ------------------------------------------------------------------
-// DAILY TOKEN  (P-1, P-2 ... resets each day)
+// ITEM FREQUENCY TRACKING  (localStorage, no server needed)
+// ------------------------------------------------------------------
+const FREQ_KEY = 'kairasi_item_freq';
+
+function loadFrequency() {
+  try { return JSON.parse(localStorage.getItem(FREQ_KEY) || '{}'); } catch (_) { return {}; }
+}
+
+function saveFrequency(freq) {
+  try { localStorage.setItem(FREQ_KEY, JSON.stringify(freq)); } catch (_) {}
+}
+
+function trackItemAdd(id) {
+  const freq = loadFrequency();
+  freq[id]   = (freq[id] || 0) + 1;
+  saveFrequency(freq);
+}
+
+// Returns top N item IDs sorted by frequency
+function getTopItemIds(n = 5) {
+  const freq = loadFrequency();
+  return Object.entries(freq)
+    .filter(([id]) => state.menuItems.find(m => m.id === id))
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, n)
+    .map(([id]) => id);
+}
+
+// ------------------------------------------------------------------
+// HAPTIC
+// ------------------------------------------------------------------
+function haptic(ms = 40) {
+  try { if (navigator.vibrate) navigator.vibrate(ms); } catch (_) {}
+}
+
+// ------------------------------------------------------------------
+// RENDER: QUICK-ADD STRIP
+// ------------------------------------------------------------------
+function renderQuickAdd() {
+  const strip    = document.getElementById('quick-add-strip');
+  const itemsEl  = document.getElementById('quick-add-items');
+  if (!strip || !itemsEl) return;
+
+  const topIds = getTopItemIds(5);
+  if (topIds.length === 0) { strip.classList.add('hidden'); return; }
+
+  strip.classList.remove('hidden');
+
+  itemsEl.innerHTML = topIds.map(id => {
+    const item  = state.menuItems.find(m => m.id === id);
+    if (!item) return '';
+    const entry = state.cart[id];
+    const qty   = entry?.qty ?? 0;
+    return `
+      <button onclick="window.__addItem('${id}')"
+        class="flex-shrink-0 flex items-center gap-1.5 bg-surface border ${qty > 0 ? 'border-accent/50' : 'border-border'} rounded-xl px-2.5 py-1.5 active:scale-95 transition-transform">
+        <span class="text-[11px] font-bold text-textPrimary whitespace-nowrap">${esc(item.name)}</span>
+        ${qty > 0 ? `<span class="text-[9px] font-extrabold text-accent bg-accent/15 rounded-full w-4 h-4 flex items-center justify-center leading-none">${qty}</span>` : ''}
+      </button>
+    `;
+  }).join('');
+}
+
+
 // Uses a transaction on meta/daily_counter to be race-condition safe.
 // ------------------------------------------------------------------
 async function getNextToken() {
@@ -775,6 +819,14 @@ function renderCategories() {
   }).join('');
 
   document.getElementById('cats-loading')?.remove();
+
+  // Set sticky top for cat-tabs-wrapper based on whether quick-add strip is visible
+  const strip   = document.getElementById('quick-add-strip');
+  const wrapper = document.getElementById('cat-tabs-wrapper');
+  if (wrapper) {
+    const stripH = (strip && !strip.classList.contains('hidden')) ? strip.offsetHeight : 0;
+    wrapper.style.top = `${113 + stripH}px`;
+  }
 }
 
 // ------------------------------------------------------------------
@@ -864,8 +916,9 @@ function renderCart() {
   if (count > 0) { badge.textContent = count; badge.classList.remove('hidden'); }
   else           { badge.classList.add('hidden'); }
 
-  // "Save as Parcel" only visible when cart has items
-  document.getElementById('save-parcel-btn').classList.toggle('hidden', count === 0);
+  // "Save as Parcel" only visible when cart has items and not in inline mode
+  document.getElementById('save-parcel-btn').classList.toggle('hidden', count === 0 || state.parcelInlineMode);
+  document.getElementById('order-action-btns').classList.toggle('hidden', state.parcelInlineMode);
 
   // Cash section: only when panel expanded AND cart non-empty
   const cashSec = document.getElementById('cash-section');
@@ -878,6 +931,7 @@ function renderCart() {
     list.innerHTML = '<p class="text-textMuted text-xs py-2 pb-3">No items added yet.</p>';
     updateBalanceDisplay();
     renderSmartSuggestions();
+    renderQuickAdd();
     return;
   }
 
@@ -919,6 +973,7 @@ function renderCart() {
   list.innerHTML = rows + totalRow;
   updateBalanceDisplay();
   renderSmartSuggestions();
+  renderQuickAdd();
   if (container) container.scrollTop = prevScroll;
 }
 
@@ -989,16 +1044,13 @@ function renderParcels() {
         <button class="w-full text-left p-3.5 active:bg-surfaceHover transition-colors"
           onclick="window.__toggleParcelExpand('${parcel.id}')">
 
-          <div class="flex items-start justify-between gap-2">
-            <div class="flex items-center gap-2.5 flex-1 min-w-0">
-              <!-- Token badge -->
-              <span class="flex-shrink-0 text-[11px] font-extrabold bg-accent/15 text-accent border border-accent/30 rounded-lg px-2 py-1 leading-none">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2 flex-1 min-w-0">
+              <span class="flex-shrink-0 text-[13px] font-extrabold bg-accent/15 text-accent border border-accent/30 rounded-lg px-2.5 py-1 leading-none">
                 ${esc(parcel.token ?? '?')}
               </span>
-              <div class="min-w-0">
-                <p class="text-[13px] font-bold text-textPrimary truncate">${esc(parcel.customerName)}</p>
-                ${parcel.phone ? `<p class="text-[11px] text-textMuted">${esc(parcel.phone)}</p>` : ''}
-              </div>
+              <span class="text-[10px] text-textMuted">${timeAgo(parcel.createdAt)}</span>
+              ${parcel.notes ? `<span class="text-[10px] text-textMuted truncate flex-1">· ${esc(parcel.notes)}</span>` : ''}
             </div>
             <div class="flex items-center gap-2 flex-shrink-0">
               <span class="text-[10px] font-bold px-2 py-1 rounded-lg border ${isPaid
@@ -1006,6 +1058,7 @@ function renderParcels() {
                 : 'bg-danger/10  border-danger/30  text-danger'}">
                 ${isPaid ? 'Paid' : 'Unpaid'}
               </span>
+              <span class="text-[13px] font-extrabold text-textPrimary">₹${parcel.total}</span>
               <svg class="w-3.5 h-3.5 text-textMuted transition-transform ${isExpanded ? 'rotate-180' : ''}"
                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/>
@@ -1013,16 +1066,6 @@ function renderParcels() {
             </div>
           </div>
 
-          <div class="flex items-center justify-between mt-2">
-            <div class="flex items-center gap-2 min-w-0">
-              <span class="text-[10px] text-textMuted flex-shrink-0">${items.length} item${items.length !== 1 ? 's' : ''}</span>
-              ${parcel.notes ? `<span class="text-[10px] text-textMuted truncate">· ${esc(parcel.notes)}</span>` : ''}
-            </div>
-            <div class="flex items-center gap-2 flex-shrink-0">
-              <span class="text-[10px] text-textMuted">${timeAgo(parcel.createdAt)}</span>
-              <span class="text-[13px] font-extrabold text-textPrimary">₹${parcel.total}</span>
-            </div>
-          </div>
         </button>
 
         <!-- Expanded detail -->
@@ -1033,6 +1076,16 @@ function renderParcels() {
               <p class="text-[12px] font-bold text-textPrimary">Total</p>
               <p class="text-sm font-extrabold text-success">₹${parcel.total}</p>
             </div>
+          </div>
+
+          <!-- Inline notes edit -->
+          <div class="px-3.5 pb-2">
+            <input
+              type="text"
+              value="${esc(parcel.notes || '')}"
+              placeholder="Add suggestions / notes..."
+              onblur="window.__updateParcelNotes('${parcel.id}', this.value)"
+              class="field w-full bg-bg border border-border rounded-xl px-3 py-2 text-[12px] text-textPrimary placeholder-textMuted"/>
           </div>
 
           ${isPending ? `
@@ -1049,30 +1102,34 @@ function renderParcels() {
                 class="flex-1 bg-accent text-bg text-[11px] font-bold rounded-xl py-2.5 active:scale-[0.97] transition-transform">
                 Mark Fulfilled
               </button>
-              <button
-                onclick="window.__deleteParcel('${parcel.id}')"
-                class="w-9 flex-shrink-0 bg-danger/10 border border-danger/30 text-danger rounded-xl py-2.5 active:scale-95 transition-transform flex items-center justify-center"
-                title="Delete parcel">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                </svg>
-              </button>
+              ${state.isLoggedIn ? `
+                <button
+                  onclick="window.__deleteParcel('${parcel.id}')"
+                  class="w-9 flex-shrink-0 bg-danger/10 border border-danger/30 text-danger rounded-xl py-2.5 active:scale-95 transition-transform flex items-center justify-center"
+                  title="Delete parcel">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                  </svg>
+                </button>
+              ` : ''}
             </div>
           ` : `
             <div class="px-3.5 pb-3 border-t border-border pt-2 flex items-center justify-between">
               <p class="text-[10px] text-textMuted">
                 Fulfilled ${parcel.fulfilledAt ? timeAgo(parcel.fulfilledAt) : ''}
               </p>
-              <button
-                onclick="window.__deleteParcel('${parcel.id}')"
-                class="flex items-center gap-1 text-[10px] text-danger/70 font-semibold active:opacity-60 transition-opacity">
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                </svg>
-                Delete
-              </button>
+              ${state.isLoggedIn ? `
+                <button
+                  onclick="window.__deleteParcel('${parcel.id}')"
+                  class="flex items-center gap-1 text-[10px] text-danger/70 font-semibold active:opacity-60 transition-opacity">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                  </svg>
+                  Delete
+                </button>
+              ` : ''}
             </div>
           `}
         </div>
@@ -1128,7 +1185,13 @@ function renderAdminList() {
 // ------------------------------------------------------------------
 function updateParcelTabBadge() {
   const pending = state.parcels.filter(p => p.status === 'pending').length;
-  document.getElementById('parcel-tab-badge').classList.toggle('hidden', pending === 0);
+  const badge   = document.getElementById('parcel-tab-badge');
+  if (pending === 0) {
+    badge.classList.add('hidden');
+  } else {
+    badge.textContent = pending;
+    badge.classList.remove('hidden');
+  }
 }
 
 // ------------------------------------------------------------------
@@ -1154,6 +1217,8 @@ window.__addItem = (id) => {
   const wasEmpty = cartItemCount() === 0;
   if (!state.cart[id]) state.cart[id] = { qty: 0, boneless: false };
   state.cart[id].qty++;
+  trackItemAdd(id);
+  haptic();
   if (wasEmpty) expandOrderPanel();
   saveCartToSession();
   renderMenu();
@@ -1164,6 +1229,7 @@ window.__removeItem = (id) => {
   if (!state.cart[id]) return;
   state.cart[id].qty = Math.max(0, state.cart[id].qty - 1);
   if (state.cart[id].qty === 0) delete state.cart[id];
+  haptic(25);
   saveCartToSession();
   renderMenu();
   renderCart();
@@ -1179,13 +1245,66 @@ window.__toggleBoneless = (id, checked) => {
 };
 
 window.clearOrder = () => {
+  // Save for undo before wiping
+  if (cartItemCount() > 0) {
+    state.lastClearedCart = { ...state.cart };
+    showUndoClearToast();
+  }
+
   state.cart         = {};
   state.cashReceived = 0;
-  const cashInput    = document.getElementById('cash-input');
-  if (cashInput) cashInput.value = '';
+  state.smartCashMode = false;
+  state.parcelInlineMode = false;
+
+  const cashInput  = document.getElementById('cash-input');
+  const smartToggle = document.getElementById('smart-cash-toggle');
+  const inlineEl   = document.getElementById('parcel-inline');
+  if (cashInput)   cashInput.value   = '';
+  if (smartToggle) smartToggle.checked = false;
+  if (inlineEl)    inlineEl.classList.add('hidden');
+
   saveCartToSession();
   renderMenu();
   renderCart();
+};
+
+// ------------------------------------------------------------------
+// UNDO CLEAR TOAST
+// ------------------------------------------------------------------
+function showUndoClearToast() {
+  // Clear any existing timer/toast
+  if (state.undoClearTimer) clearTimeout(state.undoClearTimer);
+  const existing = document.getElementById('undo-toast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.id    = 'undo-toast';
+  toast.className = 'fixed bottom-[7.5rem] left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 bg-surface border border-border rounded-2xl px-4 py-2.5 shadow-2xl shadow-black/60 text-sm font-semibold text-textPrimary whitespace-nowrap';
+  toast.innerHTML = `
+    Order cleared
+    <button onclick="window.undoClear()" class="text-accent font-extrabold text-sm underline underline-offset-2 active:opacity-60">Undo</button>
+  `;
+  document.body.appendChild(toast);
+
+  state.undoClearTimer = setTimeout(() => {
+    toast.remove();
+    state.lastClearedCart = null;
+  }, 5000);
+}
+
+window.undoClear = () => {
+  if (state.undoClearTimer) clearTimeout(state.undoClearTimer);
+  const toast = document.getElementById('undo-toast');
+  if (toast) toast.remove();
+
+  if (state.lastClearedCart) {
+    state.cart = state.lastClearedCart;
+    state.lastClearedCart = null;
+    expandOrderPanel();
+    saveCartToSession();
+    renderMenu();
+    renderCart();
+  }
 };
 
 // ------------------------------------------------------------------
@@ -1357,79 +1476,77 @@ window.clearParcelSearch = () => {
 };
 
 // ------------------------------------------------------------------
-// PARCEL SHEET
+// INLINE PARCEL SAVE
 // ------------------------------------------------------------------
-window.openParcelSheet = () => {
+window.openInlineParcel = async () => {
   if (cartItemCount() === 0) return;
 
-  const items = cartToParcelItems();
-  const total = cartTotal();
+  // Pre-fetch next token to show in the inline UI
+  state.parcelInlineMode = true;
+  const inlineEl  = document.getElementById('parcel-inline');
+  const notesEl   = document.getElementById('parcel-inline-notes');
+  const paidEl    = document.getElementById('parcel-inline-paid');
+  const errEl     = document.getElementById('parcel-inline-error');
+  const tokenSpan = document.getElementById('parcel-inline-token');
 
-  document.getElementById('parcel-sheet-summary').innerHTML =
-    items.map(it => `
-      <div class="flex items-center justify-between">
-        <p class="text-[11px] text-textPrimary truncate flex-1 pr-2">
-          ${esc(it.name)}${it.boneless ? ' <span class="text-accent">(BL)</span>' : ''} × ${it.qty}
-        </p>
-        <p class="text-[11px] font-bold text-success flex-shrink-0">₹${it.subtotal}</p>
-      </div>
-    `).join('') + `
-    <div class="flex justify-between pt-1.5 mt-1 border-t border-border/40">
-      <p class="text-[11px] font-bold text-textPrimary">Total</p>
-      <p class="text-[11px] font-extrabold text-success">₹${total}</p>
-    </div>`;
+  if (notesEl)   notesEl.value   = '';
+  if (paidEl)    paidEl.checked  = false;
+  if (errEl)     errEl.classList.add('hidden');
+  if (tokenSpan) tokenSpan.textContent = '...';
 
-  document.getElementById('parcel-name').value   = '';
-  document.getElementById('parcel-phone').value  = '';
-  document.getElementById('parcel-notes').value  = '';
-  document.getElementById('parcel-paid').checked = false;
-  document.getElementById('parcel-sheet-error').classList.add('hidden');
+  inlineEl.classList.remove('hidden');
+  document.getElementById('order-action-btns').classList.add('hidden');
 
-  const bd = document.getElementById('parcel-sheet-backdrop');
-  bd.classList.remove('hidden');
-  bd.classList.add('flex');
-  setTimeout(() => document.getElementById('parcel-name').focus(), 60);
+  // Ensure panel is expanded so inline section is visible
+  expandOrderPanel();
+  setTimeout(() => { if (notesEl) notesEl.focus(); }, 60);
+
+  // Fetch token in background (transaction) and show it
+  try {
+    const token = await getNextToken();
+    state._pendingToken = token;
+    if (tokenSpan) tokenSpan.textContent = token;
+  } catch (err) {
+    state._pendingToken = null;
+    if (tokenSpan) tokenSpan.textContent = 'P-?';
+  }
 };
 
-window.closeParcelSheet = () => {
-  const bd = document.getElementById('parcel-sheet-backdrop');
-  bd.classList.add('hidden');
-  bd.classList.remove('flex');
-};
-
-window.onParcelSheetBackdropClick = (e) => {
-  if (e.target === document.getElementById('parcel-sheet-backdrop')) closeParcelSheet();
+window.closeInlineParcel = () => {
+  state.parcelInlineMode = false;
+  state._pendingToken    = null;
+  document.getElementById('parcel-inline').classList.add('hidden');
+  document.getElementById('order-action-btns').classList.remove('hidden');
+  renderCart();
 };
 
 window.saveParcel = async () => {
-  const name   = document.getElementById('parcel-name').value.trim();
-  const phone  = document.getElementById('parcel-phone').value.trim();
-  const notes  = document.getElementById('parcel-notes').value.trim();
-  const paid   = document.getElementById('parcel-paid').checked;
-  const errEl  = document.getElementById('parcel-sheet-error');
-  const btn    = document.getElementById('parcel-save-btn');
+  const notes  = (document.getElementById('parcel-inline-notes')?.value || '').trim();
+  const paid   = document.getElementById('parcel-inline-paid')?.checked ?? false;
+  const errEl  = document.getElementById('parcel-inline-error');
+  const btn    = document.getElementById('parcel-inline-save-btn');
 
   const items = cartToParcelItems();
   const total = cartTotal();
 
   if (items.length === 0) {
-    errEl.textContent = 'Cart is empty.';
-    errEl.classList.remove('hidden');
+    if (errEl) { errEl.textContent = 'Cart is empty.'; errEl.classList.remove('hidden'); }
     return;
   }
 
-  btn.textContent = 'Saving...';
-  btn.disabled    = true;
-  errEl.classList.add('hidden');
+  if (btn) { btn.textContent = 'Saving...'; btn.disabled = true; }
+  if (errEl) errEl.classList.add('hidden');
 
   try {
-    const token = await getNextToken();
+    // Use pre-fetched token if available, otherwise get a new one
+    const token = state._pendingToken || await getNextToken();
+    state._pendingToken = null;
 
     await addDoc(collection(db, 'parcels'), {
       token,
-      customerName: name || token,   // token (e.g. P-4) as fallback display name
-      phone:        phone || '',
-      notes:        notes || '',
+      customerName: token,    // token is the identifier
+      phone:        '',
+      notes:        notes,
       items,
       total,
       paid,
@@ -1438,16 +1555,27 @@ window.saveParcel = async () => {
       fulfilledAt:  null,
     });
 
-    closeParcelSheet();
+    window.closeInlineParcel();
     window.clearOrder();
     switchTab('parcels');
 
   } catch (err) {
-    errEl.textContent = `Save failed: ${err.message}`;
-    errEl.classList.remove('hidden');
+    if (errEl) { errEl.textContent = `Save failed: ${err.message}`; errEl.classList.remove('hidden'); }
   } finally {
-    btn.textContent = 'Save Parcel';
-    btn.disabled    = false;
+    if (btn) { btn.textContent = 'Save Parcel'; btn.disabled = false; }
+  }
+};
+
+// Inline notes update on parcel card (called on blur)
+window.__updateParcelNotes = async (id, val) => {
+  const notes = val.trim();
+  // Avoid write if value unchanged
+  const existing = state.parcels.find(p => p.id === id);
+  if (existing && (existing.notes || '') === notes) return;
+  try {
+    await updateDoc(doc(db, 'parcels', id), { notes });
+  } catch (err) {
+    console.error('Notes update failed:', err.message);
   }
 };
 
