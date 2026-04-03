@@ -1561,44 +1561,58 @@ window.__deleteItem = async (id) => {
 
 // Returns up to 5 practical payment suggestions for a given total.
 //
-// Two-pass strategy:
-//   Pass 1 (PRIORITY) — amounts where the cashier gives back a single
-//     standard denomination coin/note (₹2, ₹5, ₹10, ₹20, ₹50, ₹100).
-//     e.g. total ₹186 → suggest ₹188 (give ₹2 back), ₹196 (give ₹10 back).
-//   Pass 2 (FALLBACK) — round-up amounts (multiples of 50/100/200/500).
-//   Always appended — next major note (₹500/₹1000/₹2000) so common
-//     large-note payments are always visible.
-//
-// All arithmetic uses Math.round / Math.ceil — zero float risk.
+// Strategy:
+//   1. Exact amount.
+//   2. Amounts where cashier gives back a single denomination (₹2/₹5/₹10/₹20…).
+//   3. Standard round-up multiples as additional options.
+//   4. Smart major-note: when customer pays ₹500/₹1000, raw change is often
+//      an odd amount. Ask customer for small extra coins so change becomes a
+//      multiple of ₹5 — fewer pieces to hand back.
+//      e.g. Total ₹237, ₹500 note → change ₹263 (needs ₹1 coin, messy).
+//           Ask ₹2 more → ₹502 → change ₹265 (₹200+₹50+₹10+₹5, clean).
 function getCashSuggestions(total) {
   if (total <= 0) return [];
   const t = Math.round(total);
 
-  const seen = new Map(); // amount → change (Map preserves insertion order)
-  const add  = (n) => { if (n >= t) seen.set(n, Math.round(n - t)); };
+  const seen = new Map();
+  const add  = (n, c) => { if (n >= t && !seen.has(n)) seen.set(n, c); };
 
-  // Pass 1: exact + single-denomination change amounts (most useful)
-  add(t);
-  [2, 5, 10, 20, 50, 100].forEach(c => add(t + c));
+  // 1. Exact
+  add(t, 0);
 
-  // Pass 2: standard round-ups — skip ×5 and ×10 as they often produce
-  //   awkward change (e.g. ₹4, ₹8) that requires multiple coins.
-  [50, 100, 200, 500].forEach(step => add(Math.ceil(t / step) * step));
+  // 2. Single-denomination change (cashier hands back one coin/note)
+  [2, 5, 10, 20, 50, 100].forEach(c => add(t + c, c));
 
-  // Sort all candidates ascending
-  const sorted = [...seen.entries()]
+  // 3. Standard round-up amounts
+  [50, 100, 200, 500].forEach(step => {
+    const n = Math.ceil(t / step) * step;
+    add(n, Math.round(n - t));
+  });
+
+  // Take the 4 closest suggestions
+  const result = [...seen.entries()]
     .sort(([a], [b]) => a - b)
+    .slice(0, 4)
     .map(([amount, change]) => ({ amount, change }));
 
-  // Take the 4 smallest suggestions (clean-change ones dominate here)
-  const result = sorted.slice(0, 4);
+  // 4. Smart major-note suggestion
+  //    Find raw change from next major note, then round it UP to nearest ₹5.
+  //    The difference is the extra coins to ask from customer (only if ≤ ₹4).
+  const nextMajor = [500, 1000, 2000].find(n => n > t);
+  if (nextMajor) {
+    const rawChange   = Math.round(nextMajor - t);
+    const cleanChange = Math.ceil(rawChange / 5) * 5; // nearest ₹5 multiple
+    const extra       = cleanChange - rawChange;       // coins to ask customer
+    const payment     = (extra > 0 && extra <= 4) ? nextMajor + extra : nextMajor;
+    const change      = Math.round(payment - t);
 
-  // Always append the next major note denomination if not already shown
-  // (₹500 note for small bills, ₹1000 for medium bills, etc.)
-  const nextMajor = [500, 1000, 2000].find(
-    n => n > t && !result.some(r => r.amount === n)
-  );
-  if (nextMajor) result.push({ amount: nextMajor, change: Math.round(nextMajor - t) });
+    if (!result.some(r => r.amount === payment)) {
+      result.push({ amount: payment, change });
+    } else if (payment !== nextMajor && !result.some(r => r.amount === nextMajor)) {
+      // adjusted payment already shown — fall back to bare note
+      result.push({ amount: nextMajor, change: rawChange });
+    }
+  }
 
   return result;
 }
