@@ -193,8 +193,10 @@
         <!-- Cash input -->
         <div class="relative">
           <span class="absolute left-3 top-1/2 -translate-y-1/2 text-textMuted text-sm font-bold pointer-events-none select-none">₹</span>
-          <input id="cash-input" type="number" min="0" placeholder="Enter amount"
+          <input id="cash-input" type="number" min="0" inputmode="numeric" enterkeyhint="done"
+            placeholder="Enter amount"
             oninput="window.onCashInput(this.value)"
+            onkeydown="if(event.key==='Enter')this.blur()"
             class="field w-full bg-surface border border-border rounded-xl pl-7 pr-4 py-2.5 text-sm text-textPrimary placeholder-textMuted"/>
         </div>
 
@@ -301,6 +303,27 @@
     </button>
   </div>
 
+  <!-- Parcel name search -->
+  <div class="px-3 pb-2">
+    <div class="relative">
+      <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-textMuted pointer-events-none"
+        fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+      </svg>
+      <input id="parcel-search-input" type="text" placeholder="Search by customer name..."
+        autocomplete="off" autocapitalize="words"
+        oninput="window.onParcelSearch(this.value)"
+        class="field w-full bg-surface border border-border rounded-xl pl-9 pr-9 py-2 text-sm text-textPrimary placeholder-textMuted"/>
+      <button id="parcel-search-clear" onclick="window.clearParcelSearch()"
+        class="absolute right-3 top-1/2 -translate-y-1/2 text-textMuted hidden" aria-label="Clear search">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
   <!-- Parcel cards -->
   <div id="parcel-list" class="px-3 pt-1 pb-4 space-y-3"></div>
 
@@ -391,7 +414,7 @@
 
     <div class="space-y-3">
 
-      <input id="parcel-name" type="text" placeholder="Customer name"
+      <input id="parcel-name" type="text" placeholder="Customer name (optional)"
         class="field w-full bg-bg border border-border rounded-xl px-4 py-2.5 text-sm text-textPrimary placeholder-textMuted"/>
 
       <!-- Phone — optional -->
@@ -573,6 +596,7 @@ const state = {
   parcels:            [],
   parcelsLoaded:      false,
   parcelFilter:       'pending',
+  parcelSearch:       '',             // name search filter for parcels view
   expandedParcels:    new Set(),
 };
 
@@ -586,6 +610,23 @@ onSnapshot(
 
     for (const id of Object.keys(state.cart)) {
       if (!state.menuItems.find(m => m.id === id)) delete state.cart[id];
+    }
+
+    // First load only: restore cart saved from previous page refresh
+    if (!state.menuLoaded) {
+      try {
+        const raw = sessionStorage.getItem('kairasi_pos_cart');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          const valid  = {};
+          for (const [id, entry] of Object.entries(parsed)) {
+            if (state.menuItems.find(m => m.id === id) && entry.qty > 0) {
+              valid[id] = { qty: Number(entry.qty), boneless: !!entry.boneless };
+            }
+          }
+          if (Object.keys(valid).length > 0) state.cart = valid;
+        }
+      } catch (_) {}
     }
 
     state.menuLoaded = true;
@@ -717,12 +758,21 @@ function renderCategories() {
     state.menuItems.map(i => i.category).filter(Boolean).sort()
   )];
 
-  document.getElementById('category-tabs').innerHTML = cats.map(cat => `
-    <button
-      class="cat-tab flex-shrink-0 text-[11px] font-semibold uppercase tracking-wider px-4 py-1.5 rounded-full ${cat === state.activeCategory ? 'is-active' : ''}"
-      onclick="window.__setCategory('${esc(cat)}')"
-    >${esc(cat)}</button>
-  `).join('');
+  // Build count per category
+  const countMap = {};
+  state.menuItems.forEach(i => {
+    if (i.category) countMap[i.category] = (countMap[i.category] || 0) + 1;
+  });
+
+  document.getElementById('category-tabs').innerHTML = cats.map(cat => {
+    const count = cat === 'All' ? state.menuItems.length : (countMap[cat] || 0);
+    return `
+      <button
+        class="cat-tab flex-shrink-0 text-[11px] font-semibold uppercase tracking-wider px-4 py-1.5 rounded-full ${cat === state.activeCategory ? 'is-active' : ''}"
+        onclick="window.__setCategory('${esc(cat)}')"
+      >${esc(cat)}&thinsp;<span class="opacity-60 text-[9px] font-bold normal-case tracking-normal">${count}</span></button>
+    `;
+  }).join('');
 
   document.getElementById('cats-loading')?.remove();
 }
@@ -831,6 +881,10 @@ function renderCart() {
     return;
   }
 
+  // Preserve scroll position so re-renders don't jump the panel
+  const container  = document.getElementById('order-list-container');
+  const prevScroll = container ? container.scrollTop : 0;
+
   const rows = entries.map(([id, entry]) => {
     const item = state.menuItems.find(m => m.id === id);
     if (!item) return '';
@@ -842,9 +896,15 @@ function renderCart() {
           <p class="text-[12px] font-semibold text-textPrimary truncate">
             ${esc(item.name)}${entry.boneless ? ' <span class="text-accent text-[10px]">(BL)</span>' : ''}
           </p>
-          <p class="text-[11px] text-textMuted">₹${p} × ${entry.qty}</p>
+          <p class="text-[11px] text-textMuted">₹${p} &nbsp;·&nbsp; <span class="text-success font-semibold">₹${st}</span></p>
         </div>
-        <p class="text-[13px] font-bold text-success whitespace-nowrap">₹${st}</p>
+        <div class="flex items-center gap-1.5 flex-shrink-0">
+          <button onclick="window.__removeItem('${id}')"
+            class="w-6 h-6 rounded-lg bg-bg border border-border flex items-center justify-center text-textPrimary font-bold text-base leading-none active:scale-90 transition-transform">−</button>
+          <span class="text-[13px] font-extrabold text-textPrimary tabular-nums w-5 text-center">${entry.qty}</span>
+          <button onclick="window.__addItem('${id}')"
+            class="w-6 h-6 rounded-lg bg-accent flex items-center justify-center text-bg font-bold text-base leading-none active:scale-90 transition-transform">+</button>
+        </div>
       </div>
     `;
   }).join('');
@@ -859,6 +919,7 @@ function renderCart() {
   list.innerHTML = rows + totalRow;
   updateBalanceDisplay();
   renderSmartSuggestions();
+  if (container) container.scrollTop = prevScroll;
 }
 
 // ------------------------------------------------------------------
@@ -881,14 +942,23 @@ function renderParcels() {
     });
   }
 
+  // Apply name search on top of status filter
+  if (state.parcelSearch) {
+    const q = state.parcelSearch.toLowerCase();
+    filtered = filtered.filter(p =>
+      (p.customerName ?? '').toLowerCase().includes(q)
+    );
+  }
+
   const listEl  = document.getElementById('parcel-list');
   const emptyEl = document.getElementById('parcel-empty');
 
   if (filtered.length === 0) {
     listEl.innerHTML = '';
     emptyEl.classList.remove('hidden');
-    document.getElementById('parcel-empty-msg').textContent =
-      state.parcelFilter === 'pending' ? 'No pending parcels.' : 'No fulfilled parcels today.';
+    document.getElementById('parcel-empty-msg').textContent = state.parcelSearch
+      ? `No parcels match "${state.parcelSearch}".`
+      : state.parcelFilter === 'pending' ? 'No pending parcels.' : 'No fulfilled parcels today.';
     return;
   }
 
@@ -979,12 +1049,30 @@ function renderParcels() {
                 class="flex-1 bg-accent text-bg text-[11px] font-bold rounded-xl py-2.5 active:scale-[0.97] transition-transform">
                 Mark Fulfilled
               </button>
+              <button
+                onclick="window.__deleteParcel('${parcel.id}')"
+                class="w-9 flex-shrink-0 bg-danger/10 border border-danger/30 text-danger rounded-xl py-2.5 active:scale-95 transition-transform flex items-center justify-center"
+                title="Delete parcel">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+              </button>
             </div>
           ` : `
-            <div class="px-3.5 pb-3 border-t border-border pt-2 text-center">
+            <div class="px-3.5 pb-3 border-t border-border pt-2 flex items-center justify-between">
               <p class="text-[10px] text-textMuted">
                 Fulfilled ${parcel.fulfilledAt ? timeAgo(parcel.fulfilledAt) : ''}
               </p>
+              <button
+                onclick="window.__deleteParcel('${parcel.id}')"
+                class="flex items-center gap-1 text-[10px] text-danger/70 font-semibold active:opacity-60 transition-opacity">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+                Delete
+              </button>
             </div>
           `}
         </div>
@@ -1046,9 +1134,28 @@ function updateParcelTabBadge() {
 // ------------------------------------------------------------------
 // CART ACTIONS
 // ------------------------------------------------------------------
+
+// Expands the order panel without toggling (called on first item add).
+function expandOrderPanel() {
+  if (state.orderPanelExpanded) return;
+  state.orderPanelExpanded = true;
+  document.getElementById('order-list-container').classList.replace('collapsed', 'expanded');
+  document.getElementById('panel-chevron').classList.add('up');
+}
+
+// Persists cart to sessionStorage so a page refresh doesn't lose the order.
+function saveCartToSession() {
+  try {
+    sessionStorage.setItem('kairasi_pos_cart', JSON.stringify(state.cart));
+  } catch (_) {}
+}
+
 window.__addItem = (id) => {
+  const wasEmpty = cartItemCount() === 0;
   if (!state.cart[id]) state.cart[id] = { qty: 0, boneless: false };
   state.cart[id].qty++;
+  if (wasEmpty) expandOrderPanel();
+  saveCartToSession();
   renderMenu();
   renderCart();
 };
@@ -1057,6 +1164,7 @@ window.__removeItem = (id) => {
   if (!state.cart[id]) return;
   state.cart[id].qty = Math.max(0, state.cart[id].qty - 1);
   if (state.cart[id].qty === 0) delete state.cart[id];
+  saveCartToSession();
   renderMenu();
   renderCart();
 };
@@ -1065,6 +1173,7 @@ window.__toggleBoneless = (id, checked) => {
   if (!state.cart[id]) state.cart[id] = { qty: 1, boneless: checked };
   else                 state.cart[id].boneless = checked;
   if (state.cart[id].qty < 1) state.cart[id].qty = 1;
+  saveCartToSession();
   renderMenu();
   renderCart();
 };
@@ -1074,6 +1183,7 @@ window.clearOrder = () => {
   state.cashReceived = 0;
   const cashInput    = document.getElementById('cash-input');
   if (cashInput) cashInput.value = '';
+  saveCartToSession();
   renderMenu();
   renderCart();
 };
@@ -1220,6 +1330,32 @@ window.__fulfillParcel = async (id) => {
   }
 };
 
+window.__deleteParcel = async (id) => {
+  if (!confirm('Delete this parcel permanently? This cannot be undone.')) return;
+  try {
+    await deleteDoc(doc(db, 'parcels', id));
+    state.expandedParcels.delete(id);
+  } catch (err) {
+    alert(`Delete failed: ${err.message}`);
+  }
+};
+
+// ------------------------------------------------------------------
+// PARCEL SEARCH
+// ------------------------------------------------------------------
+window.onParcelSearch = (val) => {
+  state.parcelSearch = val.trim();
+  document.getElementById('parcel-search-clear').classList.toggle('hidden', !val);
+  renderParcels();
+};
+
+window.clearParcelSearch = () => {
+  state.parcelSearch = '';
+  document.getElementById('parcel-search-input').value = '';
+  document.getElementById('parcel-search-clear').classList.add('hidden');
+  renderParcels();
+};
+
 // ------------------------------------------------------------------
 // PARCEL SHEET
 // ------------------------------------------------------------------
@@ -1273,12 +1409,6 @@ window.saveParcel = async () => {
   const errEl  = document.getElementById('parcel-sheet-error');
   const btn    = document.getElementById('parcel-save-btn');
 
-  if (!name) {
-    errEl.textContent = 'Customer name is required.';
-    errEl.classList.remove('hidden');
-    return;
-  }
-
   const items = cartToParcelItems();
   const total = cartTotal();
 
@@ -1297,7 +1427,7 @@ window.saveParcel = async () => {
 
     await addDoc(collection(db, 'parcels'), {
       token,
-      customerName: name,
+      customerName: name || token,   // token (e.g. P-4) as fallback display name
       phone:        phone || '',
       notes:        notes || '',
       items,
@@ -1429,26 +1559,48 @@ window.__deleteItem = async (id) => {
 // SMART CASH SUGGESTIONS
 // ------------------------------------------------------------------
 
-// Returns up to 5 practical payment amounts >= total.
-// Uses Indian denomination rounding (5, 10, 20, 50, 100, 200, 500).
-// All arithmetic is integer-safe via Math.round / Math.ceil.
+// Returns up to 5 practical payment suggestions for a given total.
+//
+// Two-pass strategy:
+//   Pass 1 (PRIORITY) — amounts where the cashier gives back a single
+//     standard denomination coin/note (₹2, ₹5, ₹10, ₹20, ₹50, ₹100).
+//     e.g. total ₹186 → suggest ₹188 (give ₹2 back), ₹196 (give ₹10 back).
+//   Pass 2 (FALLBACK) — round-up amounts (multiples of 50/100/200/500).
+//   Always appended — next major note (₹500/₹1000/₹2000) so common
+//     large-note payments are always visible.
+//
+// All arithmetic uses Math.round / Math.ceil — zero float risk.
 function getCashSuggestions(total) {
   if (total <= 0) return [];
-  const t    = Math.round(total);
-  const seen = new Set();
-  const add  = (n) => { if (n >= t) seen.add(n); };
+  const t = Math.round(total);
 
-  add(t); // always include exact amount
+  const seen = new Map(); // amount → change (Map preserves insertion order)
+  const add  = (n) => { if (n >= t) seen.set(n, Math.round(n - t)); };
 
-  // Round up to each denomination step
-  [5, 10, 20, 50, 100, 200, 500].forEach(step => {
-    add(Math.ceil(t / step) * step);
-  });
+  // Pass 1: exact + single-denomination change amounts (most useful)
+  add(t);
+  [2, 5, 10, 20, 50, 100].forEach(c => add(t + c));
 
-  return [...seen]
-    .sort((a, b) => a - b)
-    .slice(0, 5)
-    .map(amount => ({ amount, change: Math.round(amount - t) }));
+  // Pass 2: standard round-ups — skip ×5 and ×10 as they often produce
+  //   awkward change (e.g. ₹4, ₹8) that requires multiple coins.
+  [50, 100, 200, 500].forEach(step => add(Math.ceil(t / step) * step));
+
+  // Sort all candidates ascending
+  const sorted = [...seen.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([amount, change]) => ({ amount, change }));
+
+  // Take the 4 smallest suggestions (clean-change ones dominate here)
+  const result = sorted.slice(0, 4);
+
+  // Always append the next major note denomination if not already shown
+  // (₹500 note for small bills, ₹1000 for medium bills, etc.)
+  const nextMajor = [500, 1000, 2000].find(
+    n => n > t && !result.some(r => r.amount === n)
+  );
+  if (nextMajor) result.push({ amount: nextMajor, change: Math.round(nextMajor - t) });
+
+  return result;
 }
 
 // Renders suggestion chips inside #smart-suggestions.
