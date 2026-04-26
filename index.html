@@ -29,6 +29,16 @@
     };
   </script>
   <style>
+    /* Prevent Android text-selection / Google Search popup on tap */
+    body, button, label, p, span, h1, h2, h3, div {
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    input, textarea, [contenteditable] {
+      -webkit-user-select: text;
+      user-select: text;
+    }
+
     *, *::before, *::after { box-sizing: border-box; }
 
     html, body {
@@ -194,6 +204,7 @@
         <div class="relative">
           <span class="absolute left-3 top-1/2 -translate-y-1/2 text-textMuted text-sm font-bold pointer-events-none select-none">₹</span>
           <input id="cash-input" type="number" min="0" inputmode="numeric" enterkeyhint="done"
+            autocomplete="off"
             placeholder="Enter amount"
             oninput="window.onCashInput(this.value)"
             onkeydown="if(event.key==='Enter')this.blur()"
@@ -211,7 +222,7 @@
       <div class="bg-bg border border-accent/30 rounded-2xl p-3 space-y-2.5">
         <p class="text-[9px] uppercase tracking-widest font-bold text-accent">Parcel — <span id="parcel-inline-token">P-?</span></p>
 
-        <input id="parcel-inline-notes" type="text"
+        <input id="parcel-inline-notes" type="text" autocomplete="off" autocapitalize="sentences"
           placeholder="Suggestions / special instructions (optional)"
           class="field w-full bg-surface border border-border rounded-xl px-3 py-2 text-sm text-textPrimary placeholder-textMuted"/>
 
@@ -449,7 +460,7 @@
 
     <div class="space-y-3">
       <input type="hidden" id="modal-doc-id"/>
-      <input id="modal-name" type="text" placeholder="Item name"
+      <input id="modal-name" type="text" placeholder="Item name" autocomplete="off" autocapitalize="words"
         class="field w-full bg-bg border border-border rounded-xl px-4 py-2.5 text-sm text-textPrimary placeholder-textMuted"/>
       <select id="modal-category"
         class="field w-full bg-bg border border-border rounded-xl px-4 py-2.5 text-sm text-textPrimary">
@@ -464,7 +475,7 @@
         <option value="Drinks">Drinks</option>
         <option value="Other">Other</option>
       </select>
-      <input id="modal-price" type="number" min="1" placeholder="Base price (₹)"
+      <input id="modal-price" type="number" min="1" placeholder="Base price (₹)" autocomplete="off"
         class="field w-full bg-bg border border-border rounded-xl px-4 py-2.5 text-sm text-textPrimary placeholder-textMuted"/>
       <div class="flex items-center justify-between bg-bg border border-border rounded-xl px-4 py-2.5">
         <span class="text-sm text-textPrimary">Has Boneless option?</span>
@@ -474,7 +485,7 @@
           <div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 peer-checked:translate-x-5"></div>
         </label>
       </div>
-      <input id="modal-boneless-price" type="number" min="1" placeholder="Boneless price (₹)"
+      <input id="modal-boneless-price" type="number" min="1" placeholder="Boneless price (₹)" autocomplete="off"
         class="field w-full bg-bg border border-border rounded-xl px-4 py-2.5 text-sm text-textPrimary placeholder-textMuted hidden"/>
       <p id="modal-error" class="hidden text-danger text-xs px-1"></p>
       <div class="flex gap-2 pt-1">
@@ -893,6 +904,7 @@ function renderMenu() {
               <input
                 type="number"
                 inputmode="numeric"
+                autocomplete="off"
                 value="${qty}"
                 min="0"
                 max="999"
@@ -1092,6 +1104,8 @@ function renderParcels() {
           <div class="px-3.5 pb-2">
             <input
               type="text"
+              autocomplete="off"
+              autocapitalize="sentences"
               value="${esc(parcel.notes || '')}"
               placeholder="Add suggestions / notes..."
               onblur="window.__updateParcelNotes('${parcel.id}', this.value)"
